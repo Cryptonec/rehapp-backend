@@ -54,7 +54,11 @@ def register(body: schemas.KurumRegister, db: Session = Depends(get_db)):
     _mail(
         to=[body.email],
         subject="Rehapp — Kaydınız Alındı",
-        html=f"<p>Merhaba {body.ad}, kaydınız alındı. Onay sonrası giriş yapabilirsiniz.</p>",
+        html=f"""<div style="font-family:sans-serif;padding:24px;">
+        <h2>Merhaba {k.ad},</h2>
+        <p>Rehapp hesabınız onaylandı!</p>
+        <p>Giriş yapmak için: https://rehapp.com.tr</p>
+        </div>""",
     )
 
     token = create_access_token({"sub": str(kurum.id)})
