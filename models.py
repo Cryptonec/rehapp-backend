@@ -32,8 +32,9 @@ class Kurum(Base):
     ad              = Column(String(200), nullable=False)
     email           = Column(String(200), unique=True, nullable=False, index=True)
     hashed_password = Column(String(256), nullable=False)
-    approved        = Column(Boolean, default=True)
+    approved        = Column(Boolean, default=False)   # ← False: onay bekliyor
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    son_giris       = Column(DateTime(timezone=True), nullable=True)  # ← eklendi
 
     students      = relationship("Student",    back_populates="kurum", cascade="all, delete-orphan")
     diagnoses     = relationship("Diagnosis",  back_populates="kurum", cascade="all, delete-orphan")
@@ -90,8 +91,8 @@ class SavedGroup(Base):
 
     id         = Column(Integer, primary_key=True, index=True)
     kurum_id   = Column(Integer, ForeignKey("kurumlar.id", ondelete="CASCADE"), nullable=False)
-    ogrenciler = Column(Text, nullable=False)        # "Ali | Ayşe | …"
-    moduller   = Column(Text, nullable=False)        # "DİL / …"
+    ogrenciler = Column(Text, nullable=False)
+    moduller   = Column(Text, nullable=False)
     saat       = Column(String(50),  nullable=True)
     notlar     = Column(Text,        nullable=True)
     liste_adi  = Column(String(200), nullable=False, default="")
