@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 import os, logging
 
 from db import get_db
@@ -35,7 +36,6 @@ def _mail(to: list, subject: str, html: str):
 def register(body: schemas.KurumRegister, db: Session = Depends(get_db)):
     if db.query(models.Kurum).filter(models.Kurum.email == body.email).first():
         raise HTTPException(status_code=400, detail="Bu e-posta zaten kayıtlı")
-
     kurum = models.Kurum(
         ad=body.ad,
         email=body.email,
@@ -45,7 +45,6 @@ def register(body: schemas.KurumRegister, db: Session = Depends(get_db)):
     db.add(kurum)
     db.commit()
     db.refresh(kurum)
-
     _mail(
         to=[ADMIN_EMAIL],
         subject=f"[Rehapp] Yeni Kayıt: {body.ad}",
@@ -56,13 +55,10 @@ def register(body: schemas.KurumRegister, db: Session = Depends(get_db)):
         subject="Rehapp — Kaydınız Alındı",
         html=f"<p>Merhaba {body.ad}, kaydınız alındı. Onay sonrası giriş yapabilirsiniz.</p>",
     )
-
     token = create_access_token({"sub": str(kurum.id)})
     return schemas.TokenResponse(
-        access_token=token,
-        token_type="bearer",
-        kurum_id=kurum.id,
-        kurum_ad=kurum.ad,
+        access_token=token, token_type="bearer",
+        kurum_id=kurum.id, kurum_ad=kurum.ad,
     )
 
 
@@ -80,12 +76,13 @@ def login(
     if not kurum.approved:
         raise HTTPException(status_code=403, detail="Hesabınız henüz onaylanmamış")
 
+    kurum.son_giris = datetime.now(timezone.utc)
+    db.commit()
+
     token = create_access_token({"sub": str(kurum.id)})
     return schemas.TokenResponse(
-        access_token=token,
-        token_type="bearer",
-        kurum_id=kurum.id,
-        kurum_ad=kurum.ad,
+        access_token=token, token_type="bearer",
+        kurum_id=kurum.id, kurum_ad=kurum.ad,
     )
 
 
@@ -100,10 +97,7 @@ def _require_admin(kurum: models.Kurum):
 
 
 @router.get("/admin/kurumlar")
-def admin_list(
-    db: Session = Depends(get_db),
-    kurum: models.Kurum = Depends(get_current_kurum),
-):
+def admin_list(db: Session = Depends(get_db), kurum: models.Kurum = Depends(get_current_kurum)):
     _require_admin(kurum)
     return [
         {
@@ -119,11 +113,7 @@ def admin_list(
 
 
 @router.post("/admin/kurumlar/{kid}/onayla")
-def admin_onayla(
-    kid: int,
-    db: Session = Depends(get_db),
-    kurum: models.Kurum = Depends(get_current_kurum),
-):
+def admin_onayla(kid: int, db: Session = Depends(get_db), kurum: models.Kurum = Depends(get_current_kurum)):
     _require_admin(kurum)
     k = db.query(models.Kurum).filter(models.Kurum.id == kid).first()
     if not k:
@@ -139,15 +129,22 @@ def admin_onayla(
 
 
 @router.post("/admin/kurumlar/{kid}/pasif")
-def admin_pasif(
-    kid: int,
-    db: Session = Depends(get_db),
-    kurum: models.Kurum = Depends(get_current_kurum),
-):
+def admin_pasif(kid: int, db: Session = Depends(get_db), kurum: models.Kurum = Depends(get_current_kurum)):
     _require_admin(kurum)
     k = db.query(models.Kurum).filter(models.Kurum.id == kid).first()
     if not k:
         raise HTTPException(status_code=404, detail="Kurum bulunamadı")
     k.approved = False
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/admin/kurumlar/{kid}")
+def admin_sil(kid: int, db: Session = Depends(get_db), kurum: models.Kurum = Depends(get_current_kurum)):
+    _require_admin(kurum)
+    k = db.query(models.Kurum).filter(models.Kurum.id == kid).first()
+    if not k:
+        raise HTTPException(status_code=404, detail="Kurum bulunamadı")
+    db.delete(k)
     db.commit()
     return {"ok": True}
