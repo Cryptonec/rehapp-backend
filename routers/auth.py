@@ -148,3 +148,41 @@ def admin_sil(kid: int, db: Session = Depends(get_db), kurum: models.Kurum = Dep
     db.delete(k)
     db.commit()
     return {"ok": True}
+
+import secrets
+
+@router.post("/sifre-sifirla-talep")
+def sifre_sifirla_talep(body: dict, db: Session = Depends(get_db)):
+    email = body.get("email", "").strip().lower()
+    k = db.query(models.Kurum).filter(models.Kurum.email == email).first()
+    # Güvenlik: kurum bulunamasa da aynı mesajı dön
+    if k:
+        token = secrets.token_urlsafe(32)
+        k.reset_token = token
+        k.reset_token_exp = datetime.now(timezone.utc).replace(tzinfo=None) + __import__('datetime').timedelta(hours=1)
+        db.commit()
+        link = f"https://rehapp.com.tr/?p=reset&token={token}"
+        _mail(
+            to=[k.email],
+            subject="Rehapp — Şifre Sıfırlama",
+            html=f"<p>Merhaba {k.ad},<br><br>Şifrenizi sıfırlamak için <a href='{link}'>buraya tıklayın</a>.<br>Link 1 saat geçerlidir.</p>",
+        )
+    return {"ok": True, "mesaj": "E-posta adresinize sıfırlama bağlantısı gönderdik."}
+
+
+@router.post("/sifre-sifirla")
+def sifre_sifirla(body: dict, db: Session = Depends(get_db)):
+    token = body.get("token", "").strip()
+    yeni  = body.get("sifre", "").strip()
+    if not token or not yeni or len(yeni) < 6:
+        raise HTTPException(status_code=400, detail="Geçersiz istek")
+    k = db.query(models.Kurum).filter(models.Kurum.reset_token == token).first()
+    if not k:
+        raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş link")
+    if k.reset_token_exp and datetime.now(timezone.utc).replace(tzinfo=None) > k.reset_token_exp:
+        raise HTTPException(status_code=400, detail="Sıfırlama linki süresi dolmuş")
+    k.hashed_password = hash_password(yeni)
+    k.reset_token     = None
+    k.reset_token_exp = None
+    db.commit()
+    return {"ok": True, "mesaj": "Şifreniz güncellendi. Giriş yapabilirsiniz."}

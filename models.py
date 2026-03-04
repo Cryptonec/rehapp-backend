@@ -35,6 +35,8 @@ class Kurum(Base):
     approved        = Column(Boolean, default=False)   # ← False: onay bekliyor
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     son_giris       = Column(DateTime(timezone=True), nullable=True)  # ← eklendi
+    reset_token     = Column(String, nullable=True)
+    reset_token_exp = Column(DateTime, nullable=True)
 
     students      = relationship("Student",    back_populates="kurum", cascade="all, delete-orphan")
     diagnoses     = relationship("Diagnosis",  back_populates="kurum", cascade="all, delete-orphan")
