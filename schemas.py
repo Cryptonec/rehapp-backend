@@ -73,6 +73,7 @@ class StudentOut(BaseModel):
     rapor_bitis: Optional[date] = None
     diagnoses: list[DiagnosisOut] = []
     modules: list[ModuleOut] = []
+    created_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
 
 
