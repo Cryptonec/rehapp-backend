@@ -38,6 +38,6 @@ app.include_router(saved_groups.router, prefix="/api")
 app.include_router(bkds.router,         prefix="/bkds", tags=["BKDS"])
 
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
