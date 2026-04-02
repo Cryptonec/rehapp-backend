@@ -32,11 +32,15 @@ class Kurum(Base):
     ad              = Column(String(200), nullable=False)
     email           = Column(String(200), unique=True, nullable=False, index=True)
     hashed_password = Column(String(256), nullable=False)
-    approved        = Column(Boolean, default=False)   # ← False: onay bekliyor
+    approved        = Column(Boolean, default=False)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
-    son_giris       = Column(DateTime(timezone=True), nullable=True)  # ← eklendi
+    son_giris       = Column(DateTime(timezone=True), nullable=True)
     reset_token     = Column(String, nullable=True)
     reset_token_exp = Column(DateTime, nullable=True)
+
+    # BKDS Takip SSO kimlik bilgileri
+    bkds_email    = Column(String(200), nullable=True)
+    bkds_password = Column(String(256), nullable=True)
 
     students      = relationship("Student",    back_populates="kurum", cascade="all, delete-orphan")
     diagnoses     = relationship("Diagnosis",  back_populates="kurum", cascade="all, delete-orphan")

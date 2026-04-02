@@ -101,3 +101,15 @@ class SavedGroupOut(BaseModel):
     liste_adi: str
     created_at: datetime
     model_config = {"from_attributes": True}
+    # ── BKDS Takip SSO ────────────────────────────────────────────────────────
+
+class BkdsCredentialsUpdate(BaseModel):
+    bkds_email:    Optional[str] = None
+    bkds_password: Optional[str] = None
+
+
+class BkdsCredentialsOut(BaseModel):
+    bkds_email:      Optional[str] = None
+    bkds_configured: bool
+    model_config = {"from_attributes": True}
+
