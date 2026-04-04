@@ -1,55 +1,60 @@
 """
 rehapp-backend/routers/bkds.py
-SSO bridge: Rehapp → bkds-takip
+Rehapp → bkds-takip SSO bridge
 """
 import os
-import httpx
-from fastapi import APIRouter, Depends, HTTPException
-from auth import get_current_kurum
+import time
+import hmac
+import hashlib
+import base64
+import json
+from fastapi import APIRouter, Depends
 import models
+from auth import get_current_kurum
 
 router = APIRouter()
 
-BKDS_APP_URL    = os.environ.get("BKDS_APP_URL",    "https://bkds.rehapp.com.tr")
+BKDS_APP_URL    = os.environ.get("BKDS_APP_URL", "https://bkds.rehapp.com.tr")
 BKDS_SSO_SECRET = os.environ.get("BKDS_SSO_SECRET", "")
 
 
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _make_sso_jwt(kurum: models.Kurum) -> str:
+    """
+    bkds-takip'in beklediği HMAC-SHA256 JWT'yi üretir.
+    verifyHs256Jwt: sig = sha256(secret + header.payload)
+    """
+    header  = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    payload = _b64url(json.dumps({
+        "sub":      str(kurum.id),
+        "email":    kurum.email,
+        "name":     kurum.ad,
+        "role":     "admin",
+        "org_id":   str(kurum.id),
+        "org_slug": str(kurum.id),   # bkds-takip'te slug = rehapp kurum_id string'i
+        "iat":      int(time.time()),
+        "exp":      int(time.time()) + 300,  # 5 dakika
+    }, ensure_ascii=False).encode())
+
+    data = f"{header}.{payload}"
+    sig  = _b64url(
+        hashlib.sha256((BKDS_SSO_SECRET + data).encode()).digest()
+    )
+    return f"{data}.{sig}"
+
+
 @router.get("/sso-url")
-async def get_sso_url(kurum: models.Kurum = Depends(get_current_kurum)):
+def get_sso_url(kurum: models.Kurum = Depends(get_current_kurum)):
+    """
+    Streamlit bu endpoint'i çağırır.
+    Tek kullanımlık SSO URL döndürür.
+    """
     if not BKDS_SSO_SECRET:
-        raise HTTPException(status_code=500, detail="BKDS_SSO_SECRET tanımlı değil")
+        return {"error": "BKDS_SSO_SECRET tanımlı değil", "redirect_url": None}
 
-    if not kurum.bkds_email or not kurum.bkds_password:
-        raise HTTPException(
-            status_code=422,
-            detail="BKDS giriş bilgileri tanımlı değil. Yönetim → BKDS Ayarları bölümünden girin.",
-        )
-
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                f"{BKDS_APP_URL}/api/sso/rehapp",
-                json={
-                    "email":         kurum.bkds_email,
-                    "password":      kurum.bkds_password,
-                    "org_slug":      str(kurum.id),
-                    "rehapp_secret": BKDS_SSO_SECRET,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.HTTPStatusError as e:
-        status = e.response.status_code
-        if status == 401:
-            raise HTTPException(status_code=502, detail="BKDS kimlik bilgileri geçersiz. Yönetim'den güncelleyin.")
-        if status == 404:
-            raise HTTPException(status_code=502, detail="Kurum bkds-takip'te tanımlı değil.")
-        raise HTTPException(status_code=502, detail=f"bkds-takip hatası: {e.response.text}")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=502, detail=f"bkds-takip erişilemiyor: {str(e)}")
-
-    redirect_url = data.get("redirect_url")
-    if not redirect_url:
-        raise HTTPException(status_code=502, detail="bkds-takip geçersiz yanıt döndürdü")
-
+    token       = _make_sso_jwt(kurum)
+    redirect_url = f"{BKDS_APP_URL}/api/sso?token={token}"
     return {"redirect_url": redirect_url}
